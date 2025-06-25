@@ -1,59 +1,73 @@
 package org.vaadin.example;
 
-import com.vaadin.flow.component.Key;
 import com.vaadin.flow.component.button.Button;
-import com.vaadin.flow.component.button.ButtonVariant;
-import com.vaadin.flow.component.html.Paragraph;
-import com.vaadin.flow.component.orderedlayout.VerticalLayout;
-import com.vaadin.flow.component.textfield.TextField;
+import com.vaadin.flow.component.grid.Grid;
+import com.vaadin.flow.component.html.H1;
+import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.router.Route;
 
-/**
- * A sample Vaadin view class.
- * <p>
- * To implement a Vaadin view just extend any Vaadin component and use @Route
- * annotation to announce it in a URL as a Spring managed bean.
- * <p>
- * A new instance of this class is created for every new user and every browser
- * tab/window.
- * <p>
- * The main view contains a text field for getting the user name and a button
- * that shows a greeting message in a notification.
- */
-@Route
-public class MainView extends VerticalLayout {
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 
-    /**
-     * Construct a new Vaadin view.
-     * <p>
-     * Build the initial UI state for the user accessing the application.
-     *
-     * @param service
-     *            The message service. Automatically injected Spring managed bean.
-     */
-    public MainView(GreetService service) {
+import java.lang.reflect.Type;
+import java.net.URI;
+import java.net.http.*;
+import java.util.List;
+import java.util.Map;
 
-        // Use TextField for standard text input
-        TextField textField = new TextField("Your name");
-        textField.addClassName("bordered");
+@Route("")
+public class MainView extends H1 {
 
-        // Button click listeners can be defined as lambda expressions
-        Button button = new Button("Say hello", e -> {
-            add(new Paragraph(service.greet(textField.getValue())));
-        });
+    private final Grid<StarshipFront> grid = new Grid<>(StarshipFront.class, false);
+    private final Gson gson = new Gson();
+    private final HttpClient client = HttpClient.newHttpClient();
 
-        // Theme variants give you predefined extra styles for components.
-        // Example: Primary button has a more prominent look.
-        button.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+    public MainView() {
+        setText("Star Wars Starships");
+        configureGrid();
+        add(grid);
+        fetchData();
+    }
 
-        // You can specify keyboard shortcuts for buttons.
-        // Example: Pressing enter in this view clicks the Button.
-        button.addClickShortcut(Key.ENTER);
+    private void configureGrid() {
+        grid.addColumn(StarshipFront::getName).setHeader("Name");
+        grid.addColumn(StarshipFront::getModel).setHeader("Model");
+        grid.addColumn(StarshipFront::getStarshipClass).setHeader("Class");
+        grid.addColumn(StarshipFront::getCrew).setHeader("Crew");
+        grid.addColumn(s -> s.getFilms().size()).setHeader("Films");
+        grid.addComponentColumn(ship -> {
+            Button b = new Button("Generar");
+            b.addClickListener(e -> generatePdf(ship.getName()));
+            return b;
+        }).setHeader("Generar");
+    }
 
-        // Use custom CSS classes to apply styling. This is defined in
-        // styles.css.
-        addClassName("centered-content");
+    private void fetchData() {
+        try {
+            HttpRequest req = HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:8087/api/starships"))
+                    .GET().build();
+            String json = client.send(req, HttpResponse.BodyHandlers.ofString()).body();
+            Type listType = new TypeToken<List<StarshipFront>>(){}.getType();
+            List<StarshipFront> ships = gson.fromJson(json, listType);
+            grid.setItems(ships);
+        } catch (Exception e) {
+            Notification.show("Error cargando datos: " + e.getMessage(), 3000, Notification.Position.MIDDLE);
+        }
+    }
 
-        add(textField, button);
+    private void generatePdf(String name) {
+        try {
+            String body = gson.toJson(Map.of("ship", name));
+            HttpRequest req = HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:8087/api/generate"))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(body))
+                    .build();
+            client.sendAsync(req, HttpResponse.BodyHandlers.discarding())
+                    .thenAccept(r -> Notification.show("PDF generado para " + name, 2000, Notification.Position.TOP_START));
+        } catch (Exception e) {
+            Notification.show("Error generando PDF: " + e.getMessage(), 3000, Notification.Position.MIDDLE);
+        }
     }
 }
