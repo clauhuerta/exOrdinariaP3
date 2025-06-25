@@ -1,19 +1,19 @@
 package es.ufv.dis.back.Ordinaria.API;
 
 public class Peticion {
-    private String ship;
+    private String name;
     private int count;
 
     public Peticion() {}
 
-    public Peticion(String s, int c) {
-        this.ship = s;
-        this.count = c;
+    public Peticion(String name, int count) {
+        this.name = name;
+        this.count = count;
     }
 
-    public String getShip() { return ship; }
-    public void setShip(String s) { this.ship = s; }
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
 
     public int getCount() { return count; }
-    public void setCount(int c) { this.count = c; }
+    public void setCount(int count) { this.count = count; }
 }

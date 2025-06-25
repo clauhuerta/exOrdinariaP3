@@ -1,30 +1,41 @@
 package es.ufv.dis.back.Ordinaria.API;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.http.ResponseEntity;
+import java.io.File;
 import java.util.List;
-import java.util.Map;
 
 @RestController
-@RequestMapping("/api")
+@RequestMapping("/api/starships")
 public class StarshipController {
 
-    private final StarshipService svc = new StarshipService();
+    @Autowired
+    private StarshipService starshipService;
 
-    @GetMapping("/starships")
-    public List<Starship> getAll() {
-        return svc.getAll();
+    @GetMapping
+    public List<Starship> getAllStarships() {
+        return starshipService.loadAllStarships();
     }
 
-    @PostMapping("/generate")
-    public ResponseEntity<?> generatePdf(@RequestBody Map<String,String> body) {
-        try {
-            svc.generateReport(body.get("ship"));
-            return ResponseEntity.ok().build();
-        } catch (Exception e) {
-            return ResponseEntity
-                    .badRequest()
-                    .body(Map.of("error", e.getMessage()));
+    @PostMapping
+    public String generatePdfAndTrackRequest(@RequestBody StarshipRequest request) {
+        String shipName = request.getShip();
+        Starship ship = starshipService.findStarshipByName(shipName);
+
+        if (ship == null) {
+            return "Starship not found";
         }
+
+        // Construye la ruta del PDF (naves/NOMBRE.pdf, reemplaza caracteres conflictivos)
+        String safeName = ship.getName().replaceAll("[^a-zA-Z0-9]", "_");
+        String dirPath = "naves";
+        String filePath = dirPath + File.separator + safeName + ".pdf";
+
+        PDFManager pdfManager = new PDFManager();
+        pdfManager.generarPDF(ship, ship.getFilms() != null ? ship.getFilms().size() : 0, filePath);
+
+        // (Aquí puedes llamar a starshipService.trackPetition(shipName) si implementas la lógica)
+
+        return "PDF generated for: " + ship.getName();
     }
 }

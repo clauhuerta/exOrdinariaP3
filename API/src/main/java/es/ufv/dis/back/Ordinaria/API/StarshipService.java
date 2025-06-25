@@ -2,79 +2,46 @@ package es.ufv.dis.back.Ordinaria.API;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
-import javax.annotation.PostConstruct;
-import java.io.*;
+import org.springframework.stereotype.Service;
+
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.FileNotFoundException;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
+@Service
 public class StarshipService {
 
-    private List<Starship> all;
-    private final Gson gson = new Gson();
-
-    private final File dataFile = new File("src/main/resources/datos.json");
-    private final File peticionesFile = new File("peticiones/peticiones.json");
-
-    @Value("${pdf.output.dir}")
-    private String pdfOutputDir;
-    @Value("${json.requests.dir}")
-    private String jsonRequestsDir;
-
-    @PostConstruct
-    public void init() throws IOException {
-        // asegurar carpetas
-        new File(pdfOutputDir).mkdirs();
-        new File(jsonRequestsDir).mkdirs();
-
-        // cargar datos.json
-        try (Reader r = new FileReader(dataFile)) {
-            Type listType = new TypeToken<List<Starship>>(){}.getType();
-            all = gson.fromJson(r, listType);
-        }
-        // inicializar peticiones.json si no existe
-        if (!peticionesFile.exists()) {
-            peticionesFile.getParentFile().mkdirs();
-            try (Writer w = new FileWriter(peticionesFile)) {
-                gson.toJson(new ArrayList<Peticion>(), w);
+    // Lee todas las naves desde data.json en resources
+    public List<Starship> loadAllStarships() {
+        try (InputStream is = getClass().getClassLoader().getResourceAsStream("data.json")) {
+            if (is == null) {
+                throw new FileNotFoundException("No se encontró data.json en el classpath");
             }
+            Gson gson = new Gson();
+            Type listType = new TypeToken<ArrayList<Starship>>() {}.getType();
+            List<Starship> ships = gson.fromJson(new InputStreamReader(is), listType);
+            return ships != null ? ships : new ArrayList<>();
+        } catch (Exception e) {
+            e.printStackTrace();
+            return new ArrayList<>();
         }
     }
 
-    public List<Starship> getAll() {
-        return all;
+    // Busca una nave por su nombre (case-insensitive)
+    public Starship findStarshipByName(String name) {
+        List<Starship> ships = loadAllStarships();
+        Optional<Starship> found = ships.stream()
+                .filter(s -> s.getName().equalsIgnoreCase(name))
+                .findFirst();
+        return found.orElse(null);
     }
 
-    public void generateReport(String shipName) throws IOException {
-        // buscar nave
-        Starship target = all.stream()
-                .filter(s -> s.getName().equalsIgnoreCase(shipName))
-                .findFirst()
-                .orElseThrow(() -> new RuntimeException("No encontrada"));
-        // generar PDF
-        PDFManager.generatePDF(target, pdfOutputDir);
-        // actualizar peticiones
-        updatePeticiones(shipName);
-    }
-
-    private synchronized void updatePeticiones(String shipName) throws IOException {
-        List<Peticion> list;
-        try (Reader r = new FileReader(peticionesFile)) {
-            Type type = new TypeToken<List<Peticion>>(){}.getType();
-            list = gson.fromJson(r, type);
-        }
-        boolean found = false;
-        for (Peticion p : list) {
-            if (p.getShip().equalsIgnoreCase(shipName)) {
-                p.setCount(p.getCount() + 1);
-                found = true;
-                break;
-            }
-        }
-        if (!found) list.add(new Peticion(shipName, 1));
-        try (Writer w = new FileWriter(peticionesFile)) {
-            gson.toJson(list, w);
-        }
+    // Método para registrar la petición (pendiente de implementar si quieres)
+    public void trackPetition(String shipName) {
+        // Implementa aquí la lógica para guardar el nombre de la nave y el contador en el JSON de peticiones
     }
 }
-

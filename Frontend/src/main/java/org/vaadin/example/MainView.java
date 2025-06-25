@@ -1,73 +1,92 @@
 package org.vaadin.example;
 
-import com.vaadin.flow.component.button.Button;
-import com.vaadin.flow.component.grid.Grid;
-import com.vaadin.flow.component.html.H1;
-import com.vaadin.flow.component.notification.Notification;
-import com.vaadin.flow.router.Route;
-
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
+import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.grid.Grid;
+import com.vaadin.flow.component.html.Div;
+import com.vaadin.flow.component.notification.Notification;
+import com.vaadin.flow.component.orderedlayout.VerticalLayout;
+import com.vaadin.flow.router.Route;
 
+import java.io.IOException;
+import java.io.OutputStream;
 import java.lang.reflect.Type;
 import java.net.URI;
-import java.net.http.*;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.util.List;
-import java.util.Map;
 
 @Route("")
-public class MainView extends H1 {
+public class MainView extends VerticalLayout {
 
-    private final Grid<StarshipFront> grid = new Grid<>(StarshipFront.class, false);
-    private final Gson gson = new Gson();
-    private final HttpClient client = HttpClient.newHttpClient();
+    private Grid<Starship> grid = new Grid<>(Starship.class, false);
+    private Gson gson = new Gson();
+    private final String BACKEND_URL = "http://localhost:8085/api/starships";
 
     public MainView() {
-        setText("Star Wars Starships");
-        configureGrid();
+        add(new Div()); // Para separar visualmente
+
+        // Configura columnas del Grid
+        grid.addColumn(Starship::getName).setHeader("Name");
+        grid.addColumn(Starship::getModel).setHeader("Model");
+        grid.addColumn(Starship::getCost_in_credits).setHeader("Cost in Credits");
+        grid.addColumn(Starship::getCrew).setHeader("Crew");
+        grid.addColumn(Starship::getCargo_capacity).setHeader("Cargo Capacity");
+        grid.addColumn(Starship::getConsumables).setHeader("Consumables");
+        grid.addColumn(Starship::getHyperdrive_rating).setHeader("Hyperdrive Rating");
+        grid.addColumn(Starship::getStarship_class).setHeader("Starship Class");
+        grid.addColumn(s -> s.getPilots() != null ? s.getPilots().size() : 0).setHeader("Pilots");
+        grid.addColumn(s -> s.getFilms() != null ? s.getFilms().size() : 0).setHeader("Films");
+
+        // Columna con el botón "Generar"
+        grid.addComponentColumn(starship -> {
+            Button btn = new Button("Generar");
+            btn.addClickListener(e -> generarPdf(starship.getName()));
+            return btn;
+        }).setHeader("Acciones");
+
         add(grid);
-        fetchData();
+        setSizeFull();
+
+        // Cargar datos al iniciar
+        cargarNaves();
     }
 
-    private void configureGrid() {
-        grid.addColumn(StarshipFront::getName).setHeader("Name");
-        grid.addColumn(StarshipFront::getModel).setHeader("Model");
-        grid.addColumn(StarshipFront::getStarshipClass).setHeader("Class");
-        grid.addColumn(StarshipFront::getCrew).setHeader("Crew");
-        grid.addColumn(s -> s.getFilms().size()).setHeader("Films");
-        grid.addComponentColumn(ship -> {
-            Button b = new Button("Generar");
-            b.addClickListener(e -> generatePdf(ship.getName()));
-            return b;
-        }).setHeader("Generar");
-    }
-
-    private void fetchData() {
+    private void cargarNaves() {
         try {
-            HttpRequest req = HttpRequest.newBuilder()
-                    .uri(URI.create("http://localhost:8087/api/starships"))
-                    .GET().build();
-            String json = client.send(req, HttpResponse.BodyHandlers.ofString()).body();
-            Type listType = new TypeToken<List<StarshipFront>>(){}.getType();
-            List<StarshipFront> ships = gson.fromJson(json, listType);
-            grid.setItems(ships);
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(BACKEND_URL))
+                    .GET()
+                    .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            Type listType = new TypeToken<List<Starship>>() {}.getType();
+            List<Starship> starships = gson.fromJson(response.body(), listType);
+            grid.setItems(starships);
         } catch (Exception e) {
-            Notification.show("Error cargando datos: " + e.getMessage(), 3000, Notification.Position.MIDDLE);
+            Notification.show("Error al cargar las naves: " + e.getMessage(), 5000, Notification.Position.MIDDLE);
         }
     }
 
-    private void generatePdf(String name) {
+    private void generarPdf(String nombreNave) {
         try {
-            String body = gson.toJson(Map.of("ship", name));
-            HttpRequest req = HttpRequest.newBuilder()
-                    .uri(URI.create("http://localhost:8087/api/generate"))
+            StarshipRequest req = new StarshipRequest(nombreNave);
+            String json = gson.toJson(req);
+
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(BACKEND_URL))
+                    .POST(HttpRequest.BodyPublishers.ofString(json))
                     .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(body))
                     .build();
-            client.sendAsync(req, HttpResponse.BodyHandlers.discarding())
-                    .thenAccept(r -> Notification.show("PDF generado para " + name, 2000, Notification.Position.TOP_START));
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            Notification.show(response.body(), 4000, Notification.Position.BOTTOM_START);
         } catch (Exception e) {
-            Notification.show("Error generando PDF: " + e.getMessage(), 3000, Notification.Position.MIDDLE);
+            Notification.show("Error al generar PDF: " + e.getMessage(), 5000, Notification.Position.MIDDLE);
         }
     }
 }
